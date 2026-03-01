@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sign Language to Speech</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f0f1a;
+      color: #eee;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      padding: 30px 0 24px;
+    }
+    header h1 { font-size: 2.2rem; color: #a78bfa; }
+    header p  { color: #888; margin-top: 6px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .video-wrapper {
+      position: relative;
+      background: #1a1a2e;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #2d2d4e;
+      aspect-ratio: 4/3;
+    }
+    #video { width: 100%; height: 100%; object-fit: cover; }
+    #canvas { display: none; }
+    .cam-off {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #1a1a2e; font-size: 1.2rem; color: #555;
+    }
+
+    .status {
+      text-align: center; margin: 12px 0;
+      color: #a78bfa; font-size: 0.9rem; min-height: 22px;
+    }
+
+    .controls {
+      display: flex; justify-content: center;
+      gap: 12px; margin: 12px 0;
+    }
+
+    button {
+      padding: 10px 26px; border: none; border-radius: 8px;
+      font-size: 1rem; cursor: pointer; transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.85; }
+    #startBtn { background: #7c3aed; color: white; }
+    #stopBtn  { background: #dc2626; color: white; display: none; }
+
+    .toggle {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; color: #888; font-size: 0.9rem;
+      margin-top: 8px; cursor: pointer;
+    }
+
+    .gesture-card {
+      background: #1a1a2e; border-radius: 12px;
+      padding: 24px; text-align: center;
+      border: 2px solid #2d2d4e; margin-bottom: 20px;
+    }
+    .gesture-label {
+      color: #888; font-size: 0.8rem;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    #gestureText {
+      font-size: 3rem; font-weight: bold;
+      color: #a78bfa; margin-top: 10px; min-height: 70px;
+    }
+
+    .guide { background: #1a1a2e; border-radius: 12px; padding: 16px; }
+    .guide h3 { margin-bottom: 12px; color: #ccc; }
+    .guide-item {
+      display: flex; align-items: center; gap: 10px;
+      background: #12122a; padding: 8px 12px;
+      border-radius: 8px; margin-bottom: 6px;
+      cursor: pointer;
+    }
+    .guide-item:hover { background: #1e1e3a; }
+    .g-emoji { font-size: 1.3rem; }
+    .g-name  { flex: 1; color: #ccc; font-size: 0.9rem; }
+    .g-says  { color: #6ee7b7; font-size: 0.85rem; margin-right: 6px; }
+    .g-tag {
+      font-size: 0.7rem; padding: 2px 7px;
+      border-radius: 4px; font-weight: 600;
+    }
+    .tag-basic     { background: #1e3a5f; color: #93c5fd; }
+    .tag-emergency { background: #7f1d1d; color: #fca5a5; }
+
+    .history-section {
+      max-width: 1100px; margin: 24px auto 0;
+      background: #1a1a2e;
+      border-radius: 12px; padding: 20px;
+    }
+    .history-header {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 14px;
+    }
+    .history-header h3 { color: #ccc; }
+    #clearBtn {
+      background: #374151; color: #ccc;
+      padding: 6px 14px; font-size: 0.85rem;
+    }
+    #historyList { display: flex; flex-direction: column; gap: 8px; }
+    .h-item {
+      display: flex; align-items: center; gap: 12px;
+      background: #12122a; padding: 10px 14px; border-radius: 8px;
+    }
+    .h-text { flex: 1; font-size: 1.1rem; color: #a78bfa; }
+    .h-time { color: #555; font-size: 0.8rem; }
+    .h-speak {
+      background: #065f46; color: #6ee7b7;
+      padding: 4px 10px; font-size: 0.8rem;
+    }
+    .empty { color: #555; text-align: center; padding: 20px; }
+
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🤟 Sign Language to Speech</h1>
+  <p>Show hand gestures to your camera — they'll be spoken aloud</p>
+</header>
+
+<div class="grid">
+
+  <!-- LEFT: Camera -->
+  <div>
+    <div class="video-wrapper">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas"></canvas>
+      <div class="cam-off" id="camOff">📷 Camera Off</div>
+    </div>
+    <p class="status" id="status">Click "Start Detection" to begin</p>
+    <div class="controls">
+      <button id="startBtn" onclick="startDetection()">▶ Start Detection</button>
+      <button id="stopBtn"  onclick="stopDetection()">⏹ Stop</button>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="autoSpeak" checked />
+      Auto-speak detected gestures
+    </label>
+  </div>
+
+  <!-- RIGHT: Gesture + Guide -->
+  <div>
+    <div class="gesture-card">
+      <div class="gesture-label">Detected Gesture</div>
+      <div id="gestureText">—</div>
+    </div>
+
+    <div class="guide">
+      <h3>📖 Gesture Guide <span style="color:#555;font-size:0.8rem;font-weight:400">(click to hear)</span></h3>
+
+      <!-- Basic -->
+      <div class="guide-item" onclick="speakText('Hello')">
+        <span class="g-emoji">✋</span><span class="g-name">Open Hand</span>
+        <span class="g-says">Hello</span><span class="g-tag tag-basic">basic</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Stop')">
+        <span class="g-emoji">✊</span><span class="g-name">Fist</span>
+        <span class="g-says">Stop</span><span class="g-tag tag-basic">basic</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Yes')">
+        <span class="g-emoji">👍</span><span class="g-name">Thumbs Up</span>
+        <span class="g-says">Yes</span><span class="g-tag tag-basic">basic</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Okay')">
+        <span class="g-emoji">👌</span><span class="g-name">Okay Sign</span>
+        <span class="g-says">Okay</span><span class="g-tag tag-basic">basic</span>
+      </div>
+      <div class="guide-item" onclick="speakText('One')">
+        <span class="g-emoji">☝️</span><span class="g-name">Index Finger</span>
+        <span class="g-says">One</span><span class="g-tag tag-basic">basic</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Peace')">
+        <span class="g-emoji">✌️</span><span class="g-name">Two Fingers</span>
+        <span class="g-says">Peace</span><span class="g-tag tag-basic">basic</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Call Me')">
+        <span class="g-emoji">🤙</span><span class="g-name">Call Me</span>
+        <span class="g-says">Call Me</span><span class="g-tag tag-basic">basic</span>
+      </div>
+      <div class="guide-item" onclick="speakText('I Love You')">
+        <span class="g-emoji">🤟</span><span class="g-name">ILY Sign</span>
+        <span class="g-says">I Love You</span><span class="g-tag tag-basic">basic</span>
+      </div>
+
+      <!-- Emergency -->
+      <div class="guide-item" onclick="speakText('Pain')">
+        <span class="g-emoji">🤕</span><span class="g-name">Crossed Fingers</span>
+        <span class="g-says">Pain</span><span class="g-tag tag-emergency">emergency</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Toilet')">
+        <span class="g-emoji">🚽</span><span class="g-name">T-Shape Hand</span>
+        <span class="g-says">Toilet</span><span class="g-tag tag-emergency">emergency</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Food')">
+        <span class="g-emoji">🍎</span><span class="g-name">Fingers Bunched</span>
+        <span class="g-says">Food</span><span class="g-tag tag-emergency">emergency</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Water')">
+        <span class="g-emoji">💧</span><span class="g-name">W Shape</span>
+        <span class="g-says">Water</span><span class="g-tag tag-emergency">emergency</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Danger')">
+        <span class="g-emoji">⚠️</span><span class="g-name">Index Pointing High</span>
+        <span class="g-says">Danger</span><span class="g-tag tag-emergency">emergency</span>
+      </div>
+      <div class="guide-item" onclick="speakText('Fire')">
+        <span class="g-emoji">🔥</span><span class="g-name">Hand Wide Open</span>
+        <span class="g-says">Fire</span><span class="g-tag tag-emergency">emergency</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- History -->
+<div class="history-section">
+  <div class="history-header">
+    <h3>📝 Detection History</h3>
+    <button id="clearBtn" onclick="clearHistory()">Clear</button>
+  </div>
+  <div id="historyList">
+    <p class="empty">No gestures detected yet...</p>
+  </div>
+</div>
+
+<script>
+  const BACKEND  = 'http://localhost:5000';
+  const INTERVAL = 800;
+
+  let intervalId = null;
+  let lastSpoken = '';
+  let history    = [];
+
+  const video     = document.getElementById('video');
+  const canvas    = document.getElementById('canvas');
+  const ctx       = canvas.getContext('2d');
+  const statusEl  = document.getElementById('status');
+  const gestureEl = document.getElementById('gestureText');
+  const camOff    = document.getElementById('camOff');
+  const startBtn  = document.getElementById('startBtn');
+  const stopBtn   = document.getElementById('stopBtn');
+  const autoSpeak = document.getElementById('autoSpeak');
+  const historyEl = document.getElementById('historyList');
+
+  async function startDetection() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      camOff.style.display   = 'none';
+      startBtn.style.display = 'none';
+      stopBtn.style.display  = 'inline-block';
+      statusEl.textContent   = 'Camera started ✅ — show your hand!';
+      intervalId = setInterval(detect, INTERVAL);
+    } catch(e) {
+      statusEl.textContent = '❌ Camera access denied. Allow camera in browser.';
+    }
+  }
+
+  function stopDetection() {
+    clearInterval(intervalId);
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    camOff.style.display   = 'flex';
+    startBtn.style.display = 'inline-block';
+    stopBtn.style.display  = 'none';
+    statusEl.textContent   = 'Detection stopped.';
+    gestureEl.textContent  = '—';
+  }
+
+  async function detect() {
+    canvas.width  = 320;
+    canvas.height = 240;
+    ctx.drawImage(video, 0, 0, 320, 240);
+    const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+    try {
+      const res  = await fetch(BACKEND + '/detect', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ image: imageData })
+      });
+      const data = await res.json();
+
+      if (data.success && data.gesture !== 'Unknown') {
+        const g = data.gesture;
+        gestureEl.textContent = g;
+        statusEl.textContent  = '✋ Detected: ' + g;
+        addToHistory(g);
+        if (autoSpeak.checked && g !== lastSpoken) {
+          lastSpoken = g;
+          speakText(g);
+        }
+      } else {
+        statusEl.textContent  = 'No hand detected — show palm to camera';
+        gestureEl.textContent = '—';
+      }
+    } catch(e) {
+      statusEl.textContent = '❌ Cannot reach backend. Is python app.py running?';
+    }
+  }
+
+  async function speakText(text) {
+    try {
+      await fetch(BACKEND + '/speak', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ text: text })
+      });
+    } catch(e) {}
+  }
+
+  function addToHistory(text) {
+    if (history.length > 0 && history[0].text === text) return;
+    history.unshift({ text: text, time: new Date().toLocaleTimeString() });
+    if (history.length > 15) history.pop();
+    renderHistory();
+  }
+
+  function renderHistory() {
+    if (history.length === 0) {
+      historyEl.innerHTML = '<p class="empty">No gestures detected yet...</p>';
+      return;
+    }
+    historyEl.innerHTML = history.map(function(item) {
+      return '<div class="h-item">' +
+        '<span class="h-text">' + item.text + '</span>' +
+        '<span class="h-time">' + item.time + '</span>' +
+        '<button class="h-speak" onclick="speakText(\'' + item.text + '\')">🔊 Speak</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  function clearHistory() {
+    history = [];
+    renderHistory();
+  }
+</script>
+
+</body>
+</html>
