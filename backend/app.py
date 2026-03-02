@@ -80,7 +80,7 @@ def classify_gesture(fingers, landmarks):
 
     # 🤙 Call Me
     if f == [1, 0, 0, 0, 1]:
-        return "Call Me"
+        return "Call Someone"
 
     # 🤟 I Love You
     if f == [1, 1, 0, 0, 1]:
