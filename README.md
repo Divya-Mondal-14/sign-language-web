@@ -67,6 +67,25 @@ Camera Feed → MediaPipe AI → Gesture Classifier → Text-to-Speech → 🔊
 
 ---
 
+Technical Approach
+
+
+## System Architecture Flow:
+
+Live Video Input (Webcam)
+↓
+Hand Landmark Detection (MediaPipe – 21 Keypoints Extraction)
+↓
+Feature Vector Generation (Normalized Landmark Coordinates)
+↓
+Gesture Classification Model (Supervised ML – SVM / Random Forest)
+↓
+Text Mapping Layer
+↓
+Text-to-Speech Engine (TTS API)
+↓
+Audio Output
+
 ## ⚙️ How It Works
 ```
 1. Browser captures webcam frame every 800ms
