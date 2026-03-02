@@ -71,6 +71,7 @@ Camera Feed → MediaPipe AI → Gesture Classifier → Text-to-Speech → 🔊
 
 
 ## System Architecture Flow:
+---
 
 Live Video Input (Webcam Feed)
         ↓
@@ -86,6 +87,7 @@ Text-to-Speech Engine (pyttsx3 / TTS API)
         ↓
 Audio Output (Speaker Output)
 
+---
 
 ## ⚙️ How It Works
 ```
