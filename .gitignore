@@ -1,11 +1,30 @@
-# Python
-venv/
+# Python virtual environment
 backend/venv/
-__pycache__/
+
+# Python cache files
+backend/__pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Node
-node_modules/
+# MediaPipe model file (large file, no need to push)
+backend/hand_landmarker.task
 
-# Environment files
+# Environment variables
 .env
+.env.local
+
+# VS Code settings
+.vscode/
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.temp
