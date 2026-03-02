@@ -1,6 +1,6 @@
 # 🤟 Sign Language to Speech Converter
 
-> A real-time web application that converts hand gestures into spoken words — bridging communication between deaf/mute individuals and the general public.
+> A real-time website that converts hand gestures into spoken words — bridging communication between deaf/mute individuals and the general public.
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python)
 ![Flask](https://img.shields.io/badge/Flask-3.1-black?style=flat-square&logo=flask)
@@ -14,11 +14,11 @@
 
 Over **70 million deaf people** worldwide use sign language as their primary communication method. Most of the general public doesn't understand sign language — creating a barrier in hospitals, schools, offices, and daily life.
 
-This app solves that by:
+This website solves that by:
 - 📷 Detecting hand gestures via webcam in real-time
-- 🧠 Using MediaPipe AI to identify 21 hand landmarks
+- 🧠 Using MediaPipe AI to identify hand landmarks
 - 🔊 Converting recognized gestures to spoken audio instantly
-- 🌐 Running entirely in the browser — no app install needed
+- 🌐 Running entirely in the browser 
 
 ---
 
@@ -90,7 +90,7 @@ Audio Output (Speaker Output)
 ```
 1. Browser captures webcam frame every 800ms
 2. Frame sent as base64 image to Flask backend
-3. MediaPipe detects 21 hand landmarks (x, y, z)
+3. MediaPipe detects hand landmarks (x, y, z)
 4. Finger positions calculated (up or down)
 5. Rule-based classifier maps positions to gesture
 6. Gesture name returned to browser
@@ -141,7 +141,7 @@ pip install mediapipe==0.10.11 opencv-python flask flask-cors numpy pyttsx3
 
 ---
 
-### Running the App
+### Running the website
 
 **Terminal 1 — Start Backend:**
 ```bash
@@ -191,7 +191,6 @@ sign-language-app/
 - ✅ Detection history with timestamps
 - ✅ Click any gesture in guide to hear it
 - ✅ Emergency signs (Pain, Fire, Danger, Water, Food, Toilet)
-- ✅ Works completely offline
 - ✅ Finger indicator dots (shows which fingers are up)
 - ✅ Handles both left and right hand
 
