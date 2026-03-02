@@ -238,7 +238,7 @@ This project addresses **UN Sustainable Development Goal 10 — Reduced Inequali
 ---
 
 ## 👨‍💻 Built By
-
+---
 Made by Team Byte Brownies as a hackathon project to demonstrate how AI can solve real human communication barriers.
 Divya Mondal (Team Lead) - Backend, Frontend
 Srineeja Bhowmick - Testing and debugging
