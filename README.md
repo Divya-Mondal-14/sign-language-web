@@ -67,24 +67,45 @@ Camera Feed → MediaPipe AI → Gesture Classifier → Text-to-Speech → 🔊
 
 ---
 
-Technical Approach
+## Technical Approach
 
 
 ## System Architecture Flow:
 
-Live Video Input (Webcam)
-↓
-Hand Landmark Detection (MediaPipe – 21 Keypoints Extraction)
-↓
-Feature Vector Generation (Normalized Landmark Coordinates)
-↓
-Gesture Classification Model (Supervised ML – SVM / Random Forest)
-↓
-Text Mapping Layer
-↓
-Text-to-Speech Engine (TTS API)
-↓
-Audio Output
+┌──────────────────────────────┐
+│      Live Video Input        │
+│        (Webcam Feed)         │
+└───────────────┬──────────────┘
+                ↓
+┌──────────────────────────────┐
+│   Hand Landmark Detection    │
+│  (MediaPipe – 21 Keypoints)  │
+└───────────────┬──────────────┘
+                ↓
+┌──────────────────────────────┐
+│   Feature Vector Generation  │
+│  (Normalized X, Y, Z Values) │
+└───────────────┬──────────────┘
+                ↓
+┌────────────────────────────────────┐
+│     Gesture Classification Model   │
+│   (Supervised ML – SVM / RF)       │
+└───────────────┬────────────────────┘
+                ↓
+┌──────────────────────────────┐
+│        Text Mapping Layer    │
+│     (Gesture → Word Output)  │
+└───────────────┬──────────────┘
+                ↓
+┌──────────────────────────────┐
+│     Text-to-Speech Engine    │
+│       (pyttsx3 / TTS API)    │
+└───────────────┬──────────────┘
+                ↓
+┌──────────────────────────────┐
+│         Audio Output         │
+│        (Speaker Output)      │
+└──────────────────────────────┘
 
 ## ⚙️ How It Works
 ```
