@@ -251,7 +251,7 @@ Made by **Team Byte Brownies** as a hackathon project to demonstrate how AI can 
   Testing & Debugging  
 
 - **Sharmistha Halder**  
-  Ideation & Concept  
+  Ideation, Concept & Documentation  
 
 ---
 ---
