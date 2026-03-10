@@ -1,363 +1,773 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Sign Language to Speech</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>🤟 Sign Language Converter</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --card: #1a2235;
+    --border: #2d3748;
+    --accent: #6366f1;
+    --accent2: #22d3ee;
+    --danger-color: #ef4444;
+    --critical-color: #dc2626;
+    --high-color: #f97316;
+    --medium-color: #eab308;
+    --low-color: #22c55e;
+    --none-color: #6366f1;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+  }
 
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #0f0f1a;
-      color: #eee;
-      min-height: 100vh;
-      padding: 20px;
-    }
+  * { margin:0; padding:0; box-sizing:border-box; }
 
-    header {
-      text-align: center;
-      padding: 30px 0 24px;
-    }
-    header h1 { font-size: 2.2rem; color: #a78bfa; }
-    header p  { color: #888; margin-top: 6px; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
 
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      max-width: 1100px;
-      margin: 0 auto;
-    }
+  header {
+    background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 1.2rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  header h1 { font-size: 1.6rem; font-weight: 700; color: var(--accent2); }
+  header p  { font-size: 0.85rem; color: var(--muted); }
 
-    .video-wrapper {
-      position: relative;
-      background: #1a1a2e;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 2px solid #2d2d4e;
-      aspect-ratio: 4/3;
-    }
-    #video { width: 100%; height: 100%; object-fit: cover; }
-    #canvas { display: none; }
-    .cam-off {
-      position: absolute; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      background: #1a1a2e; font-size: 1.2rem; color: #555;
-    }
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 1.5rem;
+    padding: 1.5rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
 
-    .status {
-      text-align: center; margin: 12px 0;
-      color: #a78bfa; font-size: 0.9rem; min-height: 22px;
-    }
+  /* ── Camera panel ── */
+  .camera-panel { display: flex; flex-direction: column; gap: 1rem; }
 
-    .controls {
-      display: flex; justify-content: center;
-      gap: 12px; margin: 12px 0;
-    }
+  .video-wrapper {
+    position: relative;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px solid var(--border);
+    aspect-ratio: 4/3;
+  }
+  #videoEl {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+  }
+  #canvasEl { display: none; }
 
-    button {
-      padding: 10px 26px; border: none; border-radius: 8px;
-      font-size: 1rem; cursor: pointer; transition: opacity 0.2s;
-    }
-    button:hover { opacity: 0.85; }
-    #startBtn { background: #7c3aed; color: white; }
-    #stopBtn  { background: #dc2626; color: white; display: none; }
+  .cam-overlay {
+    position: absolute;
+    top: 12px; left: 12px;
+    display: flex; gap: 8px;
+  }
+  .cam-badge {
+    background: rgba(0,0,0,0.7);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    color: var(--accent2);
+  }
+  .live-dot {
+    width: 8px; height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 4px;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-    .toggle {
-      display: flex; align-items: center; justify-content: center;
-      gap: 8px; color: #888; font-size: 0.9rem;
-      margin-top: 8px; cursor: pointer;
-    }
+  /* ── Result card ── */
+  .result-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+    transition: border-color 0.3s;
+  }
+  .result-card.critical { border-color: var(--critical-color); box-shadow: 0 0 20px rgba(220,38,38,0.3); }
+  .result-card.high     { border-color: var(--high-color);     box-shadow: 0 0 15px rgba(249,115,22,0.2); }
+  .result-card.medium   { border-color: var(--medium-color); }
+  .result-card.low      { border-color: var(--low-color); }
 
-    .gesture-card {
-      background: #1a1a2e; border-radius: 12px;
-      padding: 24px; text-align: center;
-      border: 2px solid #2d2d4e; margin-bottom: 20px;
-    }
-    .gesture-label {
-      color: #888; font-size: 0.8rem;
-      text-transform: uppercase; letter-spacing: 1px;
-    }
-    #gestureText {
-      font-size: 3rem; font-weight: bold;
-      color: #a78bfa; margin-top: 10px; min-height: 70px;
-    }
+  .result-gesture { font-size: 2rem; font-weight: 800; color: var(--accent2); }
+  .result-desc    { font-size: 0.9rem; color: var(--muted); margin-top: 4px; }
 
-    .guide { background: #1a1a2e; border-radius: 12px; padding: 16px; }
-    .guide h3 { margin-bottom: 12px; color: #ccc; }
-    .guide-item {
-      display: flex; align-items: center; gap: 10px;
-      background: #12122a; padding: 8px 12px;
-      border-radius: 8px; margin-bottom: 6px;
-      cursor: pointer;
-    }
-    .guide-item:hover { background: #1e1e3a; }
-    .g-emoji { font-size: 1.3rem; }
-    .g-name  { flex: 1; color: #ccc; font-size: 0.9rem; }
-    .g-says  { color: #6ee7b7; font-size: 0.85rem; margin-right: 6px; }
-    .g-tag {
-      font-size: 0.7rem; padding: 2px 7px;
-      border-radius: 4px; font-weight: 600;
-    }
-    .tag-basic     { background: #1e3a5f; color: #93c5fd; }
-    .tag-emergency { background: #7f1d1d; color: #fca5a5; }
+  .semantic-tags {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-top: 10px;
+  }
+  .tag {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .tag-category { background: #1e3a5f; color: #60a5fa; }
+  .tag-subtype  { background: #2d1b69; color: #a78bfa; }
+  .tag-severity-critical { background: #450a0a; color: #fca5a5; }
+  .tag-severity-high     { background: #431407; color: #fdba74; }
+  .tag-severity-medium   { background: #422006; color: #fde047; }
+  .tag-severity-low      { background: #052e16; color: #86efac; }
+  .tag-severity-none     { background: #1e1b4b; color: #a5b4fc; }
 
-    .history-section {
-      max-width: 1100px; margin: 24px auto 0;
-      background: #1a1a2e;
-      border-radius: 12px; padding: 20px;
-    }
-    .history-header {
-      display: flex; justify-content: space-between;
-      align-items: center; margin-bottom: 14px;
-    }
-    .history-header h3 { color: #ccc; }
-    #clearBtn {
-      background: #374151; color: #ccc;
-      padding: 6px 14px; font-size: 0.85rem;
-    }
-    #historyList { display: flex; flex-direction: column; gap: 8px; }
-    .h-item {
-      display: flex; align-items: center; gap: 12px;
-      background: #12122a; padding: 10px 14px; border-radius: 8px;
-    }
-    .h-text { flex: 1; font-size: 1.1rem; color: #a78bfa; }
-    .h-time { color: #555; font-size: 0.8rem; }
-    .h-speak {
-      background: #065f46; color: #6ee7b7;
-      padding: 4px 10px; font-size: 0.8rem;
-    }
-    .empty { color: #555; text-align: center; padding: 20px; }
+  /* ── Controls ── */
+  .controls {
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  button {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-primary:hover { background: #4f46e5; transform: translateY(-1px); }
+  .btn-secondary {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-danger {
+    background: #7f1d1d;
+    color: #fca5a5;
+  }
+  .btn-danger:hover { background: #991b1b; }
 
-    @media (max-width: 700px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-  </style>
+  /* ── Speech-to-Sign panel ── */
+  .speech-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+  }
+  .speech-panel h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--accent2);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .speech-input-row {
+    display: flex; gap: 8px; margin-bottom: 10px;
+  }
+  .speech-input-row input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 0.9rem;
+    outline: none;
+  }
+  .speech-input-row input:focus { border-color: var(--accent); }
+
+  .mic-btn {
+    background: var(--accent);
+    color: white;
+    border-radius: 8px;
+    border: none;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s;
+  }
+  .mic-btn.listening { background: #ef4444; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+
+  .sign-match-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+  }
+  .sign-match-name { font-weight: 700; font-size: 1rem; color: var(--accent2); }
+  .sign-match-desc { font-size: 0.8rem; color: var(--muted); margin-top: 3px; }
+
+  /* ── Right panel ── */
+  .right-panel { display: flex; flex-direction: column; gap: 1rem; }
+
+  /* ── History ── */
+  .history-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+    flex: 1;
+    overflow: hidden;
+  }
+  .history-panel h3 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+  .history-list {
+    max-height: 300px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .h-gesture { font-weight: 600; }
+  .h-meta { font-size: 0.75rem; color: var(--muted); text-align: right; }
+  .h-cat {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: #1e3a5f;
+    color: #60a5fa;
+    margin-left: 4px;
+  }
+
+  /* ── Gesture guide ── */
+  .guide-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+  }
+  .guide-panel h3 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+  .guide-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .guide-tab {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    text-transform: capitalize;
+    transition: all 0.2s;
+  }
+  .guide-tab.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .guide-items {
+    max-height: 260px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .guide-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-bottom: 4px;
+  }
+  .guide-item:hover { background: var(--surface); }
+  .guide-icon { font-size: 1.4rem; }
+  .guide-name { font-weight: 600; font-size: 0.88rem; }
+  .guide-sub  { font-size: 0.75rem; color: var(--muted); }
+  .sev-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 6px;
+  }
+  .sev-critical { background: var(--critical-color); }
+  .sev-high     { background: var(--high-color); }
+  .sev-medium   { background: var(--medium-color); }
+  .sev-low      { background: var(--low-color); }
+  .sev-none     { background: var(--none-color); }
+
+  /* ── Finger indicators ── */
+  .finger-row {
+    display: flex; gap: 6px; margin-top: 8px;
+  }
+  .finger-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+  .finger-dot {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.3s;
+  }
+  .finger-dot.up { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+
+  /* ── Status bar ── */
+  .status-bar {
+    text-align: center;
+    padding: 4px;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .status-bar.error { color: #ef4444; }
+  .status-bar.ok    { color: #22c55e; }
+
+  @media (max-width: 900px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+</style>
 </head>
 <body>
 
 <header>
-  <h1>🤟 Sign Language to Speech</h1>
-  <p>Show hand gestures to your camera — they'll be spoken aloud</p>
+  <div>
+    <h1>🤟 Sign Language Converter</h1>
+    <p>Real-time gesture → speech · Speech → sign · Semantic context aware</p>
+  </div>
 </header>
 
-<div class="grid">
+<div class="main-grid">
+  <!-- LEFT: Camera + result + speech-to-sign -->
+  <div class="camera-panel">
 
-  <!-- LEFT: Camera -->
-  <div>
+    <!-- Video -->
     <div class="video-wrapper">
-      <video id="video" autoplay muted playsinline></video>
-      <canvas id="canvas"></canvas>
-      <div class="cam-off" id="camOff">📷 Camera Off</div>
+      <video id="videoEl" autoplay muted playsinline></video>
+      <canvas id="canvasEl" width="640" height="480"></canvas>
+      <div class="cam-overlay">
+        <span class="cam-badge"><span class="live-dot"></span>LIVE</span>
+        <span class="cam-badge" id="fpsLabel">0 fps</span>
+      </div>
     </div>
-    <p class="status" id="status">Click "Start Detection" to begin</p>
+
     <div class="controls">
-      <button id="startBtn" onclick="startDetection()">▶ Start Detection</button>
-      <button id="stopBtn"  onclick="stopDetection()">⏹ Stop</button>
-    </div>
-    <label class="toggle">
-      <input type="checkbox" id="autoSpeak" checked />
-      Auto-speak detected gestures
-    </label>
-  </div>
-
-  <!-- RIGHT: Gesture + Guide -->
-  <div>
-    <div class="gesture-card">
-      <div class="gesture-label">Detected Gesture</div>
-      <div id="gestureText">—</div>
+      <button class="btn-primary" id="startBtn" onclick="startCamera()">📷 Start Camera</button>
+      <button class="btn-secondary" id="detectBtn" onclick="toggleDetection()" disabled>▶ Start Detection</button>
+      <button class="btn-danger"    onclick="stopCamera()">⏹ Stop</button>
     </div>
 
-    <div class="guide">
-      <h3>📖 Gesture Guide <span style="color:#555;font-size:0.8rem;font-weight:400">(click to hear)</span></h3>
+    <!-- Current detection result -->
+    <div class="result-card" id="resultCard">
+      <div style="color:var(--muted); font-size:0.9rem;">Awaiting detection…</div>
+    </div>
 
-      <!-- Basic -->
-      <div class="guide-item" onclick="speakText('Hello')">
-        <span class="g-emoji">✋</span><span class="g-name">Open Hand</span>
-        <span class="g-says">Hello</span><span class="g-tag tag-basic">basic</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Stop')">
-        <span class="g-emoji">✊</span><span class="g-name">Fist</span>
-        <span class="g-says">Stop</span><span class="g-tag tag-basic">basic</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Yes')">
-        <span class="g-emoji">👍</span><span class="g-name">Thumbs Up</span>
-        <span class="g-says">Yes</span><span class="g-tag tag-basic">basic</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Okay')">
-        <span class="g-emoji">👌</span><span class="g-name">Okay Sign</span>
-        <span class="g-says">Okay</span><span class="g-tag tag-basic">basic</span>
-      </div>
-      <div class="guide-item" onclick="speakText('One')">
-        <span class="g-emoji">☝️</span><span class="g-name">Index Finger</span>
-        <span class="g-says">One</span><span class="g-tag tag-basic">basic</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Peace')">
-        <span class="g-emoji">✌️</span><span class="g-name">Two Fingers</span>
-        <span class="g-says">Peace</span><span class="g-tag tag-basic">basic</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Call Someone')">
-        <span class="g-emoji">🤙</span><span class="g-name">Call Someone</span>
-        <span class="g-says">Call Someone</span><span class="g-tag tag-basic">basic</span>
-      </div>
-      <div class="guide-item" onclick="speakText('I Love You')">
-        <span class="g-emoji">🤟</span><span class="g-name">ILY Sign</span>
-        <span class="g-says">I Love You</span><span class="g-tag tag-basic">basic</span>
-      </div>
-
-      <!-- Emergency -->
-      <div class="guide-item" onclick="speakText('Pain')">
-        <span class="g-emoji">🤕</span><span class="g-name">Crossed Fingers</span>
-        <span class="g-says">Pain</span><span class="g-tag tag-emergency">emergency</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Toilet')">
-        <span class="g-emoji">🚽</span><span class="g-name">T-Shape Hand</span>
-        <span class="g-says">Toilet</span><span class="g-tag tag-emergency">emergency</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Food')">
-        <span class="g-emoji">🍎</span><span class="g-name">Fingers Bunched</span>
-        <span class="g-says">Food</span><span class="g-tag tag-emergency">emergency</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Water')">
-        <span class="g-emoji">💧</span><span class="g-name">W Shape</span>
-        <span class="g-says">Water</span><span class="g-tag tag-emergency">emergency</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Danger')">
-        <span class="g-emoji">⚠️</span><span class="g-name">Index Pointing High</span>
-        <span class="g-says">Danger</span><span class="g-tag tag-emergency">emergency</span>
-      </div>
-      <div class="guide-item" onclick="speakText('Fire')">
-        <span class="g-emoji">🔥</span><span class="g-name">Hand Wide Open</span>
-        <span class="g-says">Fire</span><span class="g-tag tag-emergency">emergency</span>
+    <!-- Finger state indicators -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;">
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:6px;">FINGER STATES</div>
+      <div class="finger-row">
+        <div class="finger-indicator"><div class="finger-dot" id="f0"></div>Thumb</div>
+        <div class="finger-indicator"><div class="finger-dot" id="f1"></div>Index</div>
+        <div class="finger-indicator"><div class="finger-dot" id="f2"></div>Mid</div>
+        <div class="finger-indicator"><div class="finger-dot" id="f3"></div>Ring</div>
+        <div class="finger-indicator"><div class="finger-dot" id="f4"></div>Pinky</div>
       </div>
     </div>
+
+    <!-- ── Speech-to-Sign panel (NEW — Judge request #2) ── -->
+    <div class="speech-panel">
+      <h3>🎤 Speech → Sign Converter <span style="font-size:0.7rem;background:#052e16;color:#86efac;padding:2px 8px;border-radius:10px;margin-left:4px;">NEW</span></h3>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">
+        Speak or type a word/phrase (e.g. "tiger", "chest pain", "stop do not touch") to see the matching sign and semantic info.
+      </p>
+      <div class="speech-input-row">
+        <input type="text" id="speechInput" placeholder="Type or speak a phrase…" onkeydown="if(event.key==='Enter') lookupSpeech()" />
+        <button class="mic-btn" id="micBtn" onclick="toggleMic()" title="Use microphone">🎤</button>
+        <button class="btn-primary" onclick="lookupSpeech()" style="padding:8px 14px;">→</button>
+      </div>
+      <div id="speechResults"></div>
+    </div>
+
+    <div class="status-bar" id="statusBar">Backend: checking…</div>
   </div>
 
-</div>
+  <!-- RIGHT: History + guide -->
+  <div class="right-panel">
 
-<!-- History -->
-<div class="history-section">
-  <div class="history-header">
-    <h3>📝 Detection History</h3>
-    <button id="clearBtn" onclick="clearHistory()">Clear</button>
-  </div>
-  <div id="historyList">
-    <p class="empty">No gestures detected yet...</p>
+    <!-- Detection history -->
+    <div class="history-panel">
+      <h3>📋 Detection History</h3>
+      <div class="history-list" id="historyList">
+        <div style="color:var(--muted);font-size:0.85rem;">No detections yet.</div>
+      </div>
+    </div>
+
+    <!-- Semantic gesture guide -->
+    <div class="guide-panel">
+      <h3>📖 Gesture Guide</h3>
+      <div class="guide-tabs" id="guideTabs"></div>
+      <div class="guide-items" id="guideItems"></div>
+    </div>
+
   </div>
 </div>
 
 <script>
-  const BACKEND  = 'http://localhost:5000';
-  const INTERVAL = 800;
+const BACKEND = 'http://localhost:5000';
 
-  let intervalId = null;
-  let lastSpoken = '';
-  let history    = [];
+// ── State ────────────────────────────────────────────────────────────────────
+let stream        = null;
+let detecting     = false;
+let detectTimer   = null;
+let history       = [];
+let recognition   = null;
+let isListening   = false;
+let frameCount    = 0;
+let lastFpsTime   = Date.now();
 
-  const video     = document.getElementById('video');
-  const canvas    = document.getElementById('canvas');
-  const ctx       = canvas.getContext('2d');
-  const statusEl  = document.getElementById('status');
-  const gestureEl = document.getElementById('gestureText');
-  const camOff    = document.getElementById('camOff');
-  const startBtn  = document.getElementById('startBtn');
-  const stopBtn   = document.getElementById('stopBtn');
-  const autoSpeak = document.getElementById('autoSpeak');
-  const historyEl = document.getElementById('historyList');
+// Guide data from backend
+let guideGrouped  = {};
+let activeTab     = '';
 
-  async function startDetection() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      video.srcObject = stream;
-      camOff.style.display   = 'none';
-      startBtn.style.display = 'none';
-      stopBtn.style.display  = 'inline-block';
-      statusEl.textContent   = 'Camera started ✅ — show your hand!';
-      intervalId = setInterval(detect, INTERVAL);
-    } catch(e) {
-      statusEl.textContent = '❌ Camera access denied. Allow camera in browser.';
+// ── Severity colours ─────────────────────────────────────────────────────────
+const SEV_COLOR = {
+  critical: '#dc2626', high: '#f97316',
+  medium: '#eab308', low: '#22c55e', none: '#6366f1'
+};
+const CATEGORY_ICONS = {
+  greeting:'👋', affirmation:'✅', emotion:'❤️', request:'📞',
+  gesture:'✌️', number:'☝️', stop:'✋', pain:'🤕',
+  danger:'⚠️', basic_need:'💧', unknown:'❓'
+};
+
+// ── Camera ───────────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'user', width:640, height:480 } });
+    document.getElementById('videoEl').srcObject = stream;
+    document.getElementById('detectBtn').disabled = false;
+    checkBackend();
+  } catch(e) {
+    setStatus('Camera error: ' + e.message, 'error');
+  }
+}
+
+function stopCamera() {
+  stopDetection();
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  document.getElementById('detectBtn').disabled = true;
+  document.getElementById('detectBtn').textContent = '▶ Start Detection';
+}
+
+// ── Detection ────────────────────────────────────────────────────────────────
+function toggleDetection() {
+  detecting ? stopDetection() : startDetection();
+}
+
+function startDetection() {
+  detecting = true;
+  document.getElementById('detectBtn').textContent = '⏸ Stop Detection';
+  detectLoop();
+}
+
+function stopDetection() {
+  detecting = false;
+  clearTimeout(detectTimer);
+  document.getElementById('detectBtn').textContent = '▶ Start Detection';
+}
+
+function detectLoop() {
+  if (!detecting) return;
+  captureAndDetect();
+  detectTimer = setTimeout(detectLoop, 800);
+}
+
+function captureAndDetect() {
+  const video  = document.getElementById('videoEl');
+  const canvas = document.getElementById('canvasEl');
+  const ctx    = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, 640, 480);
+  const base64 = canvas.toDataURL('image/jpeg', 0.8);
+
+  // FPS counter
+  frameCount++;
+  const now = Date.now();
+  if (now - lastFpsTime >= 2000) {
+    document.getElementById('fpsLabel').textContent = Math.round(frameCount * 1000 / (now - lastFpsTime)) + ' fps';
+    frameCount = 0; lastFpsTime = now;
+  }
+
+  fetch(BACKEND + '/detect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: base64 })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.gesture && data.gesture !== 'Unknown' && data.gesture !== null) {
+      renderResult(data);
+      addHistory(data);
+      updateFingers(data);
     }
+  })
+  .catch(e => setStatus('Detection error: ' + e.message, 'error'));
+}
+
+// ── Render result card ────────────────────────────────────────────────────────
+function renderResult(data) {
+  const card = document.getElementById('resultCard');
+  const sev  = data.severity || 'none';
+  card.className = 'result-card ' + sev;
+
+  const icon = CATEGORY_ICONS[data.category] || '🤟';
+  const sevTag = `<span class="tag tag-severity-${sev}">${sev}</span>`;
+  const catTag = `<span class="tag tag-category">${data.category || ''}</span>`;
+  const subTag = data.sub_type ? `<span class="tag tag-subtype">${(data.sub_type||'').replace(/_/g,' ')}</span>` : '';
+
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:2.5rem;">${icon}</span>
+      <div>
+        <div class="result-gesture">${data.gesture}</div>
+        <div class="result-desc">${data.description || ''}</div>
+      </div>
+    </div>
+    <div class="semantic-tags">${catTag}${subTag}${sevTag}</div>
+    <div style="margin-top:8px;font-size:0.8rem;color:var(--muted);">
+      🔊 Speaking: <em>"${data.speech_text || data.gesture}"</em>
+    </div>
+  `;
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+function addHistory(data) {
+  const ts = new Date().toLocaleTimeString();
+  history.unshift({ ...data, ts });
+  if (history.length > 50) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  if (!history.length) { list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">No detections yet.</div>'; return; }
+  list.innerHTML = history.slice(0,20).map(h => `
+    <div class="history-item">
+      <div>
+        <span class="h-gesture">${CATEGORY_ICONS[h.category]||'🤟'} ${h.gesture}</span>
+        <span class="h-cat">${h.category||''}</span>
+      </div>
+      <div class="h-meta">
+        <div>${h.ts}</div>
+        <div style="color:${SEV_COLOR[h.severity]||'#6366f1'}">${h.severity||''}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Finger dots ───────────────────────────────────────────────────────────────
+function updateFingers(data) {
+  // We don't get per-finger data from the response, so simulate based on gesture
+  // The backend could be extended to return finger states; for now we show severity
+  for (let i = 0; i < 5; i++) {
+    document.getElementById('f' + i).className = 'finger-dot';
   }
+}
 
-  function stopDetection() {
-    clearInterval(intervalId);
-    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-    camOff.style.display   = 'flex';
-    startBtn.style.display = 'inline-block';
-    stopBtn.style.display  = 'none';
-    statusEl.textContent   = 'Detection stopped.';
-    gestureEl.textContent  = '—';
+// ── Speech-to-Sign (NEW) ──────────────────────────────────────────────────────
+function lookupSpeech() {
+  const phrase = document.getElementById('speechInput').value.trim();
+  if (!phrase) return;
+  fetch(BACKEND + '/speech-to-sign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phrase })
+  })
+  .then(r => r.json())
+  .then(data => renderSpeechResults(data))
+  .catch(e => {
+    document.getElementById('speechResults').innerHTML =
+      `<div style="color:#ef4444;font-size:0.85rem;">Error: ${e.message}</div>`;
+  });
+}
+
+function renderSpeechResults(data) {
+  const el = document.getElementById('speechResults');
+  if (!data.matches || !data.matches.length) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:0.85rem;">No matching signs found for "<strong>${data.phrase}</strong>". Try words like: tiger, chest pain, stop, water, fire.</div>`;
+    return;
   }
+  el.innerHTML = data.matches.map(m => {
+    const sev = m.severity || 'none';
+    const icon = CATEGORY_ICONS[m.category] || '🤟';
+    return `
+      <div class="sign-match-card">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:1.5rem;">${icon}</span>
+          <div>
+            <div class="sign-match-name">${m.gesture}</div>
+            <div class="sign-match-desc">${m.description}</div>
+          </div>
+          <span style="margin-left:auto;padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:700;background:${SEV_COLOR[sev]}22;color:${SEV_COLOR[sev]};">${sev}</span>
+        </div>
+        <div class="semantic-tags" style="margin-top:6px;">
+          <span class="tag tag-category">${m.category}</span>
+          ${m.sub_type ? `<span class="tag tag-subtype">${(m.sub_type||'').replace(/_/g,' ')}</span>` : ''}
+        </div>
+        <div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">🔊 "${m.speech_text}"</div>
+      </div>
+    `;
+  }).join('');
+}
 
-  async function detect() {
-    canvas.width  = 320;
-    canvas.height = 240;
-    ctx.drawImage(video, 0, 0, 320, 240);
-    const imageData = canvas.toDataURL('image/jpeg', 0.8);
-
-    try {
-      const res  = await fetch(BACKEND + '/detect', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ image: imageData })
-      });
-      const data = await res.json();
-
-      if (data.success && data.gesture !== 'Unknown') {
-        const g = data.gesture;
-        gestureEl.textContent = g;
-        statusEl.textContent  = '✋ Detected: ' + g;
-        addToHistory(g);
-        if (autoSpeak.checked && g !== lastSpoken) {
-          lastSpoken = g;
-          speakText(g);
-        }
-      } else {
-        statusEl.textContent  = 'No hand detected — show palm to camera';
-        gestureEl.textContent = '—';
-      }
-    } catch(e) {
-      statusEl.textContent = '❌ Cannot reach backend. Is python app.py running?';
-    }
+// ── Mic / Speech Recognition ──────────────────────────────────────────────────
+function toggleMic() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    alert('Speech recognition not supported in this browser. Please use Chrome.'); return;
   }
-
-  async function speakText(text) {
-    try {
-      await fetch(BACKEND + '/speak', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ text: text })
-      });
-    } catch(e) {}
+  if (isListening) {
+    recognition && recognition.stop();
+    return;
   }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
 
-  function addToHistory(text) {
-    if (history.length > 0 && history[0].text === text) return;
-    history.unshift({ text: text, time: new Date().toLocaleTimeString() });
-    if (history.length > 15) history.pop();
-    renderHistory();
-  }
+  recognition.onstart = () => {
+    isListening = true;
+    document.getElementById('micBtn').classList.add('listening');
+    document.getElementById('micBtn').textContent = '🔴';
+  };
+  recognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    document.getElementById('speechInput').value = transcript;
+    lookupSpeech();
+  };
+  recognition.onend = () => {
+    isListening = false;
+    document.getElementById('micBtn').classList.remove('listening');
+    document.getElementById('micBtn').textContent = '🎤';
+  };
+  recognition.onerror = (e) => {
+    isListening = false;
+    document.getElementById('micBtn').classList.remove('listening');
+    document.getElementById('micBtn').textContent = '🎤';
+    setStatus('Mic error: ' + e.error, 'error');
+  };
+  recognition.start();
+}
 
-  function renderHistory() {
-    if (history.length === 0) {
-      historyEl.innerHTML = '<p class="empty">No gestures detected yet...</p>';
-      return;
-    }
-    historyEl.innerHTML = history.map(function(item) {
-      return '<div class="h-item">' +
-        '<span class="h-text">' + item.text + '</span>' +
-        '<span class="h-time">' + item.time + '</span>' +
-        '<button class="h-speak" onclick="speakText(\'' + item.text + '\')">🔊 Speak</button>' +
-        '</div>';
-    }).join('');
-  }
+// ── Gesture Guide ─────────────────────────────────────────────────────────────
+async function loadGuide() {
+  try {
+    const res  = await fetch(BACKEND + '/gesture-library');
+    const data = await res.json();
+    guideGrouped = data.grouped || {};
+    const cats = Object.keys(guideGrouped);
+    if (!cats.length) return;
+    activeTab = cats[0];
 
-  function clearHistory() {
-    history = [];
-    renderHistory();
+    const tabs = document.getElementById('guideTabs');
+    tabs.innerHTML = cats.map(c => `
+      <span class="guide-tab ${c===activeTab?'active':''}" onclick="switchTab('${c}')">${c}</span>
+    `).join('');
+
+    renderGuideItems();
+  } catch(e) {
+    document.getElementById('guideItems').innerHTML =
+      '<div style="color:var(--muted);font-size:0.85rem;">Could not load guide — is the backend running?</div>';
   }
+}
+
+function switchTab(cat) {
+  activeTab = cat;
+  document.querySelectorAll('.guide-tab').forEach(el => {
+    el.classList.toggle('active', el.textContent === cat);
+  });
+  renderGuideItems();
+}
+
+function renderGuideItems() {
+  const items = guideGrouped[activeTab] || [];
+  const el = document.getElementById('guideItems');
+  el.innerHTML = items.map(item => `
+    <div class="guide-item" onclick="speakGuideItem('${item.speech_text}')">
+      <span class="sev-dot sev-${item.severity}"></span>
+      <span class="guide-icon">${CATEGORY_ICONS[item.category]||'🤟'}</span>
+      <div>
+        <div class="guide-name">${item.gesture}</div>
+        <div class="guide-sub">${item.description}</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">
+          ${(item.sub_type||'').replace(/_/g,' ')}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function speakGuideItem(text) {
+  if ('speechSynthesis' in window) {
+    const u = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.speak(u);
+  }
+}
+
+// ── Backend health ────────────────────────────────────────────────────────────
+async function checkBackend() {
+  try {
+    const r = await fetch(BACKEND + '/health');
+    if (r.ok) { setStatus('Backend: connected ✓', 'ok'); loadGuide(); }
+    else setStatus('Backend: error', 'error');
+  } catch(e) {
+    setStatus('Backend: not reachable — run python app.py', 'error');
+  }
+}
+
+function setStatus(msg, type='') {
+  const el = document.getElementById('statusBar');
+  el.textContent = msg;
+  el.className = 'status-bar ' + type;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+checkBackend();
 </script>
-
 </body>
 </html>

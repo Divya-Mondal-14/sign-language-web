@@ -1,209 +1,370 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import cv2
+import mediapipe as mp
 import numpy as np
 import base64
-import pyttsx3
 import threading
-import mediapipe as mp
+import pyttsx3
 
 app = Flask(__name__)
 CORS(app)
 
-# Setup MediaPipe with better settings
+# ── TTS engine ──────────────────────────────────────────────────────────────
+tts_lock = threading.Lock()
+
+def speak(text):
+    def _run():
+        with tts_lock:
+            try:
+                engine = pyttsx3.init()
+                engine.setProperty('rate', 150)
+                engine.say(text)
+                engine.runAndWait()
+                engine.stop()
+            except Exception as e:
+                print(f"TTS error: {e}")
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+# ── MediaPipe ────────────────────────────────────────────────────────────────
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     static_image_mode=True,
     max_num_hands=1,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5,
-    model_complexity=1
+    min_detection_confidence=0.7
 )
 
-def speak_text(text):
-    def run():
-        engine = pyttsx3.init()
-        engine.setProperty('rate', 150)
-        engine.say(text)
-        engine.runAndWait()
-        engine.stop()
-    threading.Thread(target=run, daemon=True).start()
+# ── Semantic Gesture Map ──────────────────────────────────────────────────────
+# Judge request #1: each gesture carries category, sub_type, severity, description
+# This distinguishes "dog danger" vs "tiger danger", "chest pain" vs "head pain",
+# "stop - do not touch" vs "stop - stay back" etc.
 
-def get_fingers(landmarks, handedness):
+GESTURE_SEMANTICS = {
+    # ── Basic Communication ──────────────────────────────────────────────
+    "Hello": {
+        "category": "greeting", "sub_type": "salutation",
+        "severity": "none", "description": "General greeting gesture",
+        "speech_text": "Hello"
+    },
+    "Yes": {
+        "category": "affirmation", "sub_type": "positive_response",
+        "severity": "none", "description": "Affirmative agreement",
+        "speech_text": "Yes"
+    },
+    "Okay": {
+        "category": "affirmation", "sub_type": "acknowledgement",
+        "severity": "none", "description": "Acknowledgement or approval",
+        "speech_text": "Okay"
+    },
+    "I Love You": {
+        "category": "emotion", "sub_type": "affection",
+        "severity": "none", "description": "Expression of love",
+        "speech_text": "I Love You"
+    },
+    "Call Someone": {
+        "category": "request", "sub_type": "communication_request",
+        "severity": "low", "description": "Request to make a phone call",
+        "speech_text": "Please call someone"
+    },
+    "Peace": {
+        "category": "gesture", "sub_type": "symbol",
+        "severity": "none", "description": "Peace sign",
+        "speech_text": "Peace"
+    },
+    "One": {
+        "category": "number", "sub_type": "count",
+        "severity": "none", "description": "Number one",
+        "speech_text": "One"
+    },
+
+    # ── STOP — sub_type distinguishes the REASON to stop ─────────────────
+    "Stop": {
+        "category": "stop", "sub_type": "general_stop",
+        "severity": "medium", "description": "General stop — cease current action",
+        "speech_text": "Stop"
+    },
+    "Stop - Do Not Touch": {
+        "category": "stop", "sub_type": "do_not_touch",
+        "severity": "high", "description": "Stop — do not touch this object or person",
+        "speech_text": "Stop, do not touch"
+    },
+    "Stop - Stay Back": {
+        "category": "stop", "sub_type": "stay_back",
+        "severity": "high", "description": "Stop — maintain distance, stay where you are",
+        "speech_text": "Stop, stay back"
+    },
+    "Stop - Wrong Way": {
+        "category": "stop", "sub_type": "wrong_direction",
+        "severity": "medium", "description": "Stop — you are going the wrong way",
+        "speech_text": "Stop, wrong way"
+    },
+
+    # ── PAIN — sub_type identifies WHERE or WHAT kind of pain ────────────
+    "Pain": {
+        "category": "pain", "sub_type": "general_pain",
+        "severity": "high", "description": "General pain — location unspecified",
+        "speech_text": "I am in pain"
+    },
+    "Head Pain": {
+        "category": "pain", "sub_type": "head_pain",
+        "severity": "high", "description": "Pain in the head or headache",
+        "speech_text": "I have head pain"
+    },
+    "Chest Pain": {
+        "category": "pain", "sub_type": "chest_pain",
+        "severity": "critical", "description": "Chest pain — possible cardiac event",
+        "speech_text": "I have chest pain, please help"
+    },
+    "Stomach Pain": {
+        "category": "pain", "sub_type": "stomach_pain",
+        "severity": "high", "description": "Abdominal or stomach pain",
+        "speech_text": "I have stomach pain"
+    },
+
+    # ── DANGER — sub_type distinguishes the SOURCE of danger ─────────────
+    "Danger": {
+        "category": "danger", "sub_type": "general_danger",
+        "severity": "critical", "description": "General danger — unspecified threat",
+        "speech_text": "Danger!"
+    },
+    "Animal Danger - Dog": {
+        "category": "danger", "sub_type": "animal_threat_dog",
+        "severity": "critical", "description": "Danger from a dog — aggressive animal nearby",
+        "speech_text": "Danger! Aggressive dog nearby"
+    },
+    "Animal Danger - Tiger": {
+        "category": "danger", "sub_type": "animal_threat_tiger",
+        "severity": "critical", "description": "Danger from a tiger or large wild animal",
+        "speech_text": "Danger! Wild animal, tiger nearby"
+    },
+    "Fire Danger": {
+        "category": "danger", "sub_type": "fire_hazard",
+        "severity": "critical", "description": "Fire danger — evacuate immediately",
+        "speech_text": "Fire danger, evacuate now"
+    },
+    "Medical Danger": {
+        "category": "danger", "sub_type": "medical_emergency",
+        "severity": "critical", "description": "Medical emergency — person needs immediate care",
+        "speech_text": "Medical emergency, call a doctor"
+    },
+    "Flood Danger": {
+        "category": "danger", "sub_type": "flood_hazard",
+        "severity": "critical", "description": "Flood or water danger",
+        "speech_text": "Danger! Flooding nearby"
+    },
+
+    # ── Basic Needs ──────────────────────────────────────────────────────
+    "Water": {
+        "category": "basic_need", "sub_type": "hydration",
+        "severity": "medium", "description": "Requesting water to drink",
+        "speech_text": "I need water"
+    },
+    "Food": {
+        "category": "basic_need", "sub_type": "nourishment",
+        "severity": "medium", "description": "Requesting food",
+        "speech_text": "I need food"
+    },
+    "Toilet": {
+        "category": "basic_need", "sub_type": "restroom",
+        "severity": "medium", "description": "Need to use the toilet",
+        "speech_text": "I need the toilet"
+    },
+    "Fire": {
+        "category": "danger", "sub_type": "fire_hazard",
+        "severity": "critical", "description": "Fire emergency",
+        "speech_text": "Fire! Emergency!"
+    },
+}
+
+SEVERITY_PREFIX = {
+    "critical": "CRITICAL ALERT! ",
+    "high":     "Alert! ",
+    "medium":   "",
+    "low":      "",
+    "none":     "",
+}
+
+# ── Finger-state helper ───────────────────────────────────────────────────────
+def get_finger_states(hand_landmarks):
+    lm = hand_landmarks.landmark
+    tips  = [4, 8, 12, 16, 20]
+    bases = [2, 6, 10, 14, 18]
     fingers = []
-    if handedness == "Right":
-        fingers.append(1 if landmarks[4][0] < landmarks[3][0] else 0)
-    else:
-        fingers.append(1 if landmarks[4][0] > landmarks[3][0] else 0)
-
-    tips = [8, 12, 16, 20]
-    pips = [6, 10, 14, 18]
-    for tip, pip in zip(tips, pips):
-        fingers.append(1 if landmarks[tip][1] < landmarks[pip][1] else 0)
-
+    fingers.append(1 if lm[tips[0]].x < lm[bases[0]].x else 0)
+    for i in range(1, 5):
+        fingers.append(1 if lm[tips[i]].y < lm[bases[i]].y else 0)
     return fingers
 
-def get_distance(p1, p2):
-    return np.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+def are_fingers_crossed(lm):
+    ix, iy = lm[8].x, lm[8].y
+    mx, my = lm[12].x, lm[12].y
+    return abs(ix - mx) < 0.05 and abs(iy - my) < 0.06
 
-def classify_gesture(fingers, landmarks):
-    f = fingers
+def is_okay_sign(lm):
+    dist = ((lm[4].x - lm[8].x)**2 + (lm[4].y - lm[8].y)**2) ** 0.5
+    return dist < 0.06
+
+def is_thumb_between_fingers(lm):
+    return lm[4].y > lm[8].y and lm[4].y > lm[12].y
+
+def classify_gesture(hand_landmarks):
+    lm = hand_landmarks.landmark
+    f  = get_finger_states(hand_landmarks)
     thumb, index, middle, ring, pinky = f
 
-    # ✊ Fist = Stop
-    if f == [0, 0, 0, 0, 0]:
-        return "Stop"
-
-    # ✋ Open Hand = Hello
-    if f == [1, 1, 1, 1, 1]:
-        return "Hello"
-
-    # ☝️ One finger
-    if f == [0, 1, 0, 0, 0]:
-        return "One"
-
-    # ✌️ Peace
-    if f == [0, 1, 1, 0, 0]:
-        return "Peace"
-
-    # 3 fingers
-    if f == [0, 1, 1, 1, 0]:
-        return "Three"
-
-    # 4 fingers
-    if f == [0, 1, 1, 1, 1]:
-        return "Four"
-
-    # 👍 Thumbs up = Yes
-    if f == [1, 0, 0, 0, 0]:
-        return "Yes"
-
-    # 🤙 Call Me
-    if f == [1, 0, 0, 0, 1]:
-        return "Call Someone"
-
-    # 🤟 I Love You
-    if f == [1, 1, 0, 0, 1]:
-        return "I Love You"
-
-    # 🤘 Rock On
-    if f == [0, 1, 0, 0, 1]:
-        return "Rock On"
-
-    # 🖐 Four fingers (no thumb)
-    if f == [1, 1, 1, 0, 0]:
-        return "Three"
-
-    # 👌 Okay — thumb and index close together, other 3 up
-    thumb_tip = landmarks[4]
-    index_tip = landmarks[8]
-    dist_okay = get_distance(thumb_tip, index_tip)
-    if dist_okay < 0.05 and middle == 1 and ring == 1 and pinky == 1:
+    if is_okay_sign(lm):
         return "Okay"
-
-    # 🤕 PAIN — index and middle crossed (tips close together), ring and pinky down
-    index_tip_pt  = landmarks[8]
-    middle_tip_pt = landmarks[12]
-    dist_pain = get_distance(index_tip_pt, middle_tip_pt)
-    if dist_pain < 0.04 and index == 1 and middle == 1 and ring == 0 and pinky == 0:
+    if is_thumb_between_fingers(lm) and not any(f[1:]):
+        return "Toilet"
+    if are_fingers_crossed(lm):
         return "Pain"
 
-    # 🚽 TOILET — thumb between index and middle (T-shape)
-    # Thumb up, index and middle up, ring and pinky down
-    if f == [1, 1, 1, 0, 0]:
-        thumb_x  = landmarks[4][0]
-        index_x  = landmarks[8][0]
-        middle_x = landmarks[12][0]
-        if index_x < thumb_x < middle_x or middle_x < thumb_x < index_x:
-            return "Toilet"
+    count = sum(f)
 
-    # 🍎 FOOD — all four fingers together pointing up, thumb tucked
-    if f == [0, 1, 1, 1, 1]:
-        # Check all fingertips are close together (bunched)
-        tips_pts = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]]
-        max_spread = max(
-            get_distance(tips_pts[i], tips_pts[j])
-            for i in range(len(tips_pts))
-            for j in range(i+1, len(tips_pts))
-        )
-        if max_spread < 0.08:
-            return "Food"
-
-    # 💧 WATER — W shape: index, middle, ring up, thumb and pinky down
-    if f == [0, 1, 1, 1, 0]:
+    if count == 0:
+        return "Stop"
+    if count == 5:
+        spread = abs(lm[4].x - lm[20].x) + abs(lm[4].y - lm[20].y)
+        return "Fire" if spread > 0.5 else "Hello"
+    if thumb==1 and index==0 and middle==0 and ring==0 and pinky==0:
+        return "Yes"
+    if thumb==0 and index==1 and middle==0 and ring==0 and pinky==0:
+        return "Danger"
+    if thumb==0 and index==1 and middle==1 and ring==0 and pinky==0:
+        return "Peace"
+    if thumb==0 and index==1 and middle==1 and ring==1 and pinky==0:
         return "Water"
-
-    # 🔥 FIRE — all fingers up and spread wide apart
-    if f == [1, 1, 1, 1, 1]:
-        tips_pts = [landmarks[4], landmarks[8], landmarks[12], landmarks[16], landmarks[20]]
-        min_spread = min(
-            get_distance(tips_pts[i], tips_pts[j])
-            for i in range(len(tips_pts))
-            for j in range(i+1, len(tips_pts))
-        )
-        if min_spread > 0.08:
-            return "Fire"
-
-    # ⚠️ DANGER — index pointing up, all others curled, hand shaking
-    # We detect it as index only pointing up but held at an angle
-    if f == [0, 1, 0, 0, 0]:
-        index_y_tip  = landmarks[8][1]
-        index_y_base = landmarks[5][1]
-        if index_y_tip < index_y_base - 0.15:
-            return "Danger"
-
+    if thumb==1 and index==0 and middle==0 and ring==0 and pinky==1:
+        return "Call Someone"
+    if thumb==1 and index==1 and middle==0 and ring==0 and pinky==1:
+        return "I Love You"
+    if thumb==0 and index==1 and middle==1 and ring==1 and pinky==1:
+        return "Food"
+    if count == 1 and index == 1:
+        return "One"
     return "Unknown"
+
+# ── Speech-to-Sign keyword map (Judge request #2) ─────────────────────────────
+SPEECH_TO_SIGN = {
+    "hello": ["Hello"], "hi": ["Hello"], "bye": ["Hello"],
+    "yes": ["Yes"], "ok": ["Okay"], "okay": ["Okay"], "fine": ["Okay"],
+    "stop": ["Stop"],
+    "dont touch": ["Stop - Do Not Touch"], "do not touch": ["Stop - Do Not Touch"],
+    "stay back": ["Stop - Stay Back"], "wrong way": ["Stop - Wrong Way"],
+    "no entry": ["Stop - Stay Back"],
+    "pain": ["Pain"], "hurt": ["Pain"], "ache": ["Pain"],
+    "headache": ["Head Pain"], "head pain": ["Head Pain"], "head hurts": ["Head Pain"],
+    "chest pain": ["Chest Pain"], "heart pain": ["Chest Pain"],
+    "stomach pain": ["Stomach Pain"], "stomach ache": ["Stomach Pain"],
+    "tummy ache": ["Stomach Pain"],
+    "danger": ["Danger"], "help": ["Danger"],
+    "emergency": ["Danger", "Medical Danger"],
+    "dog": ["Animal Danger - Dog"], "aggressive dog": ["Animal Danger - Dog"],
+    "dog attack": ["Animal Danger - Dog"],
+    "tiger": ["Animal Danger - Tiger"], "wild animal": ["Animal Danger - Tiger"],
+    "lion": ["Animal Danger - Tiger"], "leopard": ["Animal Danger - Tiger"],
+    "fire": ["Fire Danger"], "fire danger": ["Fire Danger"],
+    "flood": ["Flood Danger"], "flooding": ["Flood Danger"],
+    "medical": ["Medical Danger"], "doctor": ["Medical Danger"],
+    "ambulance": ["Medical Danger"],
+    "water": ["Water"], "thirsty": ["Water"], "drink": ["Water"],
+    "food": ["Food"], "hungry": ["Food"], "eat": ["Food"],
+    "toilet": ["Toilet"], "bathroom": ["Toilet"], "restroom": ["Toilet"],
+    "love": ["I Love You"], "i love you": ["I Love You"], "love you": ["I Love You"],
+    "call": ["Call Someone"], "phone": ["Call Someone"],
+    "call someone": ["Call Someone"],
+}
+
+def speech_to_sign_lookup(phrase: str):
+    phrase_lower = phrase.lower().strip()
+    results = []
+    matched_gestures = set()
+    for key, gestures in SPEECH_TO_SIGN.items():
+        if key in phrase_lower:
+            for g in gestures:
+                if g not in matched_gestures:
+                    matched_gestures.add(g)
+                    sem = GESTURE_SEMANTICS.get(g, {})
+                    results.append({"gesture": g, "matched_keyword": key, **sem})
+    return results
+
+# ── API Routes ────────────────────────────────────────────────────────────────
 
 @app.route('/detect', methods=['POST'])
 def detect_gesture():
+    data = request.json
+    if not data or 'image' not in data:
+        return jsonify({'error': 'No image provided'}), 400
     try:
-        data = request.json
-        image_data = data['image']
+        img_data = base64.b64decode(data['image'].split(',')[1])
+        nparr    = np.frombuffer(img_data, np.uint8)
+        frame    = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        rgb      = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results  = hands.process(rgb)
 
-        image_bytes = base64.b64decode(image_data.split(',')[1])
-        np_arr = np.frombuffer(image_bytes, np.uint8)
-        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if not results.multi_hand_landmarks:
+            return jsonify({'gesture': None, 'message': 'No hand detected'})
 
-        image = cv2.flip(image, 1)
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        gesture  = classify_gesture(results.multi_hand_landmarks[0])
+        if gesture == 'Unknown':
+            return jsonify({'gesture': 'Unknown', 'message': 'Gesture not recognized'})
 
-        results = hands.process(image_rgb)
+        sem      = GESTURE_SEMANTICS.get(gesture, {
+            "category": "unknown", "sub_type": "unknown",
+            "severity": "none", "description": gesture, "speech_text": gesture
+        })
+        prefix   = SEVERITY_PREFIX.get(sem.get("severity", "none"), "")
+        tts_text = prefix + sem.get("speech_text", gesture)
+        speak(tts_text)
 
-        if results.multi_hand_landmarks and results.multi_handedness:
-            hand_lms = results.multi_hand_landmarks[0]
-            handedness = results.multi_handedness[0].classification[0].label
-
-            landmarks = [[lm.x, lm.y] for lm in hand_lms.landmark]
-            fingers = get_fingers(landmarks, handedness)
-            gesture = classify_gesture(fingers, landmarks)
-
-            return jsonify({
-                'success': True,
-                'gesture': gesture,
-                'fingers': fingers,
-                'hand': handedness
-            })
-        else:
-            return jsonify({'success': False, 'gesture': None})
-
+        return jsonify({
+            'gesture':     gesture,
+            'category':    sem['category'],
+            'sub_type':    sem['sub_type'],
+            'severity':    sem['severity'],
+            'description': sem['description'],
+            'speech_text': tts_text,
+        })
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"Detection error: {e}")
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/speak', methods=['POST'])
-def speak():
-    try:
-        text = request.json.get('text', '')
-        if text:
-            speak_text(text)
-            return jsonify({'success': True})
-        return jsonify({'success': False})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/speech-to-sign', methods=['POST'])
+def speech_to_sign():
+    """NEW — Judge request #2. Text/speech phrase → matching sign gestures + semantics."""
+    data = request.json
+    if not data or 'phrase' not in data:
+        return jsonify({'error': 'No phrase provided'}), 400
+    phrase  = data['phrase']
+    matches = speech_to_sign_lookup(phrase)
+    if not matches:
+        return jsonify({'phrase': phrase, 'matches': [], 'message': 'No matching signs found'})
+    for m in matches:
+        prefix = SEVERITY_PREFIX.get(m.get("severity", "none"), "")
+        speak(prefix + m.get("speech_text", m["gesture"]))
+    return jsonify({'phrase': phrase, 'matches': matches, 'count': len(matches)})
+
+
+@app.route('/gesture-library', methods=['GET'])
+def gesture_library():
+    """NEW — Full semantic gesture catalogue grouped by category."""
+    library = [{"gesture": name, **sem} for name, sem in GESTURE_SEMANTICS.items()]
+    grouped = {}
+    for item in library:
+        grouped.setdefault(item["category"], []).append(item)
+    return jsonify({"library": library, "grouped": grouped})
+
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'running'})
+    return jsonify({'status': 'ok'})
+
 
 if __name__ == '__main__':
     print("✅ Backend running on http://localhost:5000")
-    app.run(debug=True, port=5000)
+    print("   POST /detect          — gesture from webcam frame")
+    print("   POST /speech-to-sign  — speech/text → sign mapping (NEW)")
+    print("   GET  /gesture-library — full semantic catalogue (NEW)")
+    app.run(debug=False, host='0.0.0.0', port=5000)
